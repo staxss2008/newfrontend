@@ -25,7 +25,6 @@
               type="month"
               placeholder="选择月份"
               format="YYYY年MM月"
-              value-format="YYYY-MM"
               @change="loadData"
             />
             <el-button type="primary" @click="exportExcel">导出Excel</el-button>
@@ -324,7 +323,7 @@ export default {
   name: 'MonthlyDetail',
   data() {
     return {
-      currentMonth: new Date().toISOString().slice(0, 7),
+      currentMonth: new Date(),
       tableData: [],
       summary: {
         totalCount: 0,
@@ -391,6 +390,13 @@ export default {
         this.$store.commit('user/SET_SELECTED_DRIVER_ID', newVal)
         this.loadData()
       }
+    },
+    currentMonth(newVal) {
+      console.log('currentMonth changed:', newVal)
+      if (newVal) {
+        // 保存选择的月份到Vuex
+        this.$store.commit('user/SET_SELECTED_MONTH', newVal)
+      }
     }
   },
   async mounted() {
@@ -398,6 +404,9 @@ export default {
     window.addEventListener('resize', this.calculateTableHeight)
     if (this.isAdmin) {
       await this.loadDriverList()
+    } else {
+      // 如果是驾驶员登录，清除 selectedDriverId，使用自己的 ID
+      this.$store.commit('user/SET_SELECTED_DRIVER_ID', null)
     }
     this.loadData()
   },
@@ -479,9 +488,12 @@ export default {
 
       this.loading = true
       try {
-        const [year, month] = this.currentMonth.split('-')
+        // currentMonth 是一个 Date 对象，需要转换为年份和月份
+        const year = this.currentMonth.getFullYear()
+        const month = this.currentMonth.getMonth() + 1 // 月份从0开始，需要加1
         console.log('loadData - 开始加载数据')
         console.log('loadData - 当前月份:', this.currentMonth)
+        console.log('loadData - 年份:', year, '月份:', month)
 
         // 获取费用标准，从费用标准中读取工作天数
         try {
@@ -577,8 +589,8 @@ export default {
         // 加载详细记录
         const params = {
           driverId: driverId,
-          year: parseInt(year),
-          month: parseInt(month)
+          year: year,
+          month: month
         }
         console.log('loadData - 请求参数:', params)
         const detailRes = await getMonthlyDetail(params)
@@ -592,20 +604,27 @@ export default {
             return new Date(a.recordDate) - new Date(b.recordDate)
           })
           console.log('loadData - 排序后表格数据:', this.tableData)
-          console.log('loadData - 第一条记录:', this.tableData[0])
-          console.log('loadData - 第一条记录的recordDate:', this.tableData[0].recordDate)
-          console.log('loadData - 第一条记录的id:', this.tableData[0].id)
-          console.log('loadData - 第二条记录:', this.tableData[1])
-          console.log('loadData - 第二条记录的recordDate:', this.tableData[1].recordDate)
-          console.log('loadData - 第二条记录的id:', this.tableData[1].id)
-          console.log('loadData - 两条记录的recordDate是否相同:', this.tableData[0].recordDate === this.tableData[1].recordDate)
-          
-          // 手动测试合并方法
-          console.log('loadData - 手动测试合并方法')
-          const testResult1 = this.dutySubsidySpanMethod({ row: this.tableData[0], rowIndex: 0 })
-          const testResult2 = this.dutySubsidySpanMethod({ row: this.tableData[1], rowIndex: 1 })
-          console.log('loadData - 第一条记录的合并结果:', testResult1)
-          console.log('loadData - 第二条记录的合并结果:', testResult2)
+
+          // 只有当有记录时才打印详细信息
+          if (this.tableData.length > 0) {
+            console.log('loadData - 第一条记录:', this.tableData[0])
+            console.log('loadData - 第一条记录的recordDate:', this.tableData[0].recordDate)
+            console.log('loadData - 第一条记录的id:', this.tableData[0].id)
+
+            if (this.tableData.length > 1) {
+              console.log('loadData - 第二条记录:', this.tableData[1])
+              console.log('loadData - 第二条记录的recordDate:', this.tableData[1].recordDate)
+              console.log('loadData - 第二条记录的id:', this.tableData[1].id)
+              console.log('loadData - 两条记录的recordDate是否相同:', this.tableData[0].recordDate === this.tableData[1].recordDate)
+
+              // 手动测试合并方法
+              console.log('loadData - 手动测试合并方法')
+              const testResult1 = this.dutySubsidySpanMethod({ row: this.tableData[0], rowIndex: 0 })
+              const testResult2 = this.dutySubsidySpanMethod({ row: this.tableData[1], rowIndex: 1 })
+              console.log('loadData - 第一条记录的合并结果:', testResult1)
+              console.log('loadData - 第二条记录的合并结果:', testResult2)
+            }
+          }
         } else {
           console.log('loadData - 详细记录加载失败，code:', detailRes.code)
         }
@@ -613,19 +632,24 @@ export default {
         // 加载统计数据
         const statsRes = await getMonthlyStatistics({
           driverId: driverId,
-          year: parseInt(year),
-          month: parseInt(month)
+          year: year,
+          month: month
         })
         console.log('loadData - 统计数据响应:', statsRes)
 
-        if (statsRes.code === 200 && statsRes.data) {
-          const stats = statsRes.data
+        // 无论后端返回的数据是否为空，都要更新 summary 对象
+        if (statsRes.code === 200) {
+          const stats = statsRes.data || {}
           this.summary.totalCount = stats.total_count || 0
           this.summary.totalMileage = stats.total_mileage || 0
           this.summary.totalAmount = stats.total_amount || 0
         }
       } catch (error) {
         console.error('加载数据失败:', error)
+        // 即使出错，也要更新 summary 对象，确保显示正确的数据
+        this.summary.totalCount = 0
+        this.summary.totalMileage = 0
+        this.summary.totalAmount = 0
       } finally {
         this.loading = false
       }

@@ -236,10 +236,16 @@ export default {
     }
   },
   computed: {
-    ...mapGetters('user', ['driverId', 'selectedDriverId']),
+    ...mapGetters('user', ['driverId', 'selectedDriverId', 'selectedMonth']),
     // 优先使用Vuex中的selectedDriverId，其次使用URL传递的driverId，最后使用当前登录用户的driverId
     currentDriverId() {
       return this.selectedDriverId || this.$route.query.driverId || this.driverId
+    }
+  },
+  watch: {
+    selectedMonth() {
+      console.log('selectedMonth changed, reloading statistics')
+      this.loadCurrentMonthStatistics()
     }
   },
   mounted() {
@@ -301,13 +307,15 @@ export default {
       console.log('loadCurrentMonthStatistics - currentDriverId:', this.currentDriverId)
       console.log('loadCurrentMonthStatistics - driverId from Vuex:', this.driverId)
       console.log('loadCurrentMonthStatistics - route query:', this.$route.query)
+      console.log('loadCurrentMonthStatistics - selectedMonth from Vuex:', this.selectedMonth)
 
       if (!this.currentDriverId) {
         console.log('loadCurrentMonthStatistics - currentDriverId is null, returning')
         return
       }
 
-      const now = new Date()
+      // 使用 selectedMonth 或者当前月份
+      const now = this.selectedMonth ? new Date(this.selectedMonth) : new Date()
       const year = now.getFullYear()
       const month = now.getMonth() + 1
 
@@ -425,8 +433,10 @@ export default {
           // 本月总收入 = 总合计 + 公里费用
           this.statistics.monthlyIncome = (parseFloat(totalAmount) + parseFloat(mileageFee)).toFixed(2)
 
-          // 更新收入构成图
+          // 更新所有图表
+          this.initIncomeChart()
           this.initCompositionChart()
+          this.initHistoryChart()
         }
       } catch (error) {
         console.error('加载统计数据失败:', error)

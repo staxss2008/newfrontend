@@ -11,7 +11,7 @@
               placeholder="选择月份"
               format="YYYY年MM月"
               value-format="YYYY-MM"
-              @change="loadData"
+              @change="() => loadData(true)"
             />
             <el-button type="primary" @click="handleCalculate">计算统计</el-button>
             <el-button type="success" @click="exportExcel">导出Excel</el-button>
@@ -123,13 +123,13 @@
 
 <script>
 import { mapGetters } from 'vuex'
-import { getMonthlyStatisticsList } from '@/api/statistics'
+import { getMonthlyStatisticsList, calculateMonthlyStatistics } from '@/api/statistics'
 
 export default {
   name: 'MonthlyStatistics',
   data() {
     return {
-      currentMonth: new Date().toISOString().slice(0, 7),
+      currentMonth: this.formatCurrentMonth(),
       tableData: [],
       summary: {
         totalMileage: 0,
@@ -147,7 +147,13 @@ export default {
     this.loadData()
   },
   methods: {
-    async loadData() {
+    formatCurrentMonth() {
+      const now = new Date()
+      const year = now.getFullYear()
+      const month = String(now.getMonth() + 1).padStart(2, '0')
+      return `${year}-${month}`
+    },
+    async loadData(forceRecalculate = false) {
       if (!this.currentMonth) return
 
       this.loading = true
@@ -161,6 +167,20 @@ export default {
 
         if (res.code === 200) {
           this.tableData = res.data || []
+
+          // 如果数据为空或强制重新计算，自动调用计算统计功能
+          if (this.tableData.length === 0 || forceRecalculate) {
+            console.log('loadData - 数据为空或强制重新计算，自动调用计算统计功能')
+            await this.handleCalculate()
+            // 重新加载数据
+            const res2 = await getMonthlyStatisticsList({
+              yearMonth: this.currentMonth
+            })
+            if (res2.code === 200) {
+              this.tableData = res2.data || []
+            }
+          }
+
           this.calculateSummary()
         }
       } catch (error) {
@@ -177,8 +197,37 @@ export default {
       this.summary.totalAmount = this.tableData.reduce((sum, item) => sum + (item.totalAmount || 0), 0)
     },
 
-    handleCalculate() {
-      this.$message.info('计算统计功能待实现')
+    async handleCalculate() {
+      if (!this.currentMonth) {
+        this.$message.warning('请先选择月份')
+        return
+      }
+
+      this.loading = true
+      try {
+        const res = await calculateMonthlyStatistics({
+          yearMonth: this.currentMonth
+        })
+
+        if (res.code === 200) {
+          this.$message.success('计算统计成功')
+          await this.loadData(false)
+          // 重新加载最新的统计数据
+          const res2 = await getMonthlyStatisticsList({
+            yearMonth: this.currentMonth
+          })
+          if (res2.code === 200) {
+            this.tableData = res2.data || []
+          }
+        } else {
+          this.$message.error(res.message || '计算统计失败')
+        }
+      } catch (error) {
+        console.error('计算统计失败:', error)
+        this.$message.error('计算统计失败')
+      } finally {
+        this.loading = false
+      }
     },
 
     handleConfirm(row) {

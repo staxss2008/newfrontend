@@ -3,7 +3,8 @@ import { login, getUserInfo } from '@/api/auth'
 const state = {
   token: localStorage.getItem('token') || '',
   userInfo: JSON.parse(localStorage.getItem('userInfo') || '{}'),
-  selectedDriverId: localStorage.getItem('selectedDriverId') || null
+  selectedDriverId: localStorage.getItem('selectedDriverId') || null,
+  selectedMonth: null
 }
 
 const getters = {
@@ -17,7 +18,8 @@ const getters = {
     return role === 2 ? 'ADMIN' : 'DRIVER'
   },
   driverId: state => state.userInfo.driverId,
-  selectedDriverId: state => state.selectedDriverId
+  selectedDriverId: state => state.selectedDriverId,
+  selectedMonth: state => state.selectedMonth
 }
 
 const mutations = {
@@ -36,6 +38,9 @@ const mutations = {
     } else {
       localStorage.removeItem('selectedDriverId')
     }
+  },
+  SET_SELECTED_MONTH(state, month) {
+    state.selectedMonth = month
   },
   CLEAR_TOKEN(state) {
     state.token = ''
