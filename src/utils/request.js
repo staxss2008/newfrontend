@@ -2,6 +2,8 @@ import axios from 'axios'
 import { ElMessage } from 'element-plus'
 import store from '@/store'
 import router from '@/router'
+import { isDev, devLog, devError } from './env'
+import { addPendingRequest, removePendingRequest } from './requestManager'
 
 // 创建axios实例
 const service = axios.create({
@@ -15,8 +17,8 @@ service.interceptors.request.use(
     // 在请求发送前做一些处理
     // 直接从localStorage读取token，避免store时序问题
     const token = localStorage.getItem('token')
-    console.log('请求拦截器 - 当前token:', token ? token.substring(0, 20) + '...' : 'null')
-    console.log('请求拦截器 - 请求URL:', config.url)
+    devLog('请求拦截器 - 当前token:', token ? token.substring(0, 20) + '...' : 'null')
+    devLog('请求拦截器 - 请求URL:', config.url)
 
     // 密码重置接口不需要token
     const isResetPassword = config.url && config.url.includes('/auth/reset-driver-password')
@@ -24,13 +26,17 @@ service.interceptors.request.use(
     if (token && !isResetPassword) {
       // 让每个请求携带token（除了密码重置接口）
       config.headers['Authorization'] = 'Bearer ' + token
-      console.log('请求拦截器 - 已添加Authorization头')
+      devLog('请求拦截器 - 已添加Authorization头')
     }
+
+    // 添加请求管理
+    addPendingRequest(config)
+
     return config
   },
   error => {
     // 对请求错误做些什么
-    console.error('请求错误:', error)
+    devError('请求错误:', error)
     return Promise.reject(error)
   }
 )
@@ -38,6 +44,9 @@ service.interceptors.request.use(
 // 响应拦截器
 service.interceptors.response.use(
   response => {
+    // 移除请求管理
+    removePendingRequest(response.config)
+
     // 对响应数据做点什么
     const res = response.data
 
@@ -58,7 +67,13 @@ service.interceptors.response.use(
   },
   error => {
     // 对响应错误做点什么
-    console.error('响应错误:', error)
+    devError('响应错误:', error)
+
+    // 如果是取消的请求，不处理
+    if (axios.isCancel(error)) {
+      devLog('请求被取消:', error.message)
+      return Promise.reject(error)
+    }
 
     if (error.response) {
       switch (error.response.status) {
